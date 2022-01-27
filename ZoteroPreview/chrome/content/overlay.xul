@@ -23,6 +23,28 @@
 		</tabpanel>
 	</tabpanels>
 	
+	<deck id="zotero-item-pane-content" class="zotero-item-pane-content">
+		<vbox style="width:100%;height:100%;display: flex;" flex="1"><!-- id="preview-pane" class="preview-pane"-->
+			<iframe id="zoteropreview2-preview-box" style="padding: 0; background:white;width:100%;height:100%;display: flex;" overflow="auto" type="content" sandbox="allow-same-origin"/>
+		</vbox>
+	</deck>
+
+  <treecols id="zotero-items-columns-header">
+    <treecol
+      id="zotero-items-column-noteDetail"
+      label="noteDetail"
+      flex="1"
+      insertafter="zotero-items-column-title"
+      zotero-persist="width ordinal hidden sortActive sortDirection"
+    />
+    <treecol
+      id="zotero-items-column-tags"
+      label="tags"
+      flex="1"
+      insertafter="zotero-items-column-noteDetail"
+      zotero-persist="width ordinal hidden sortActive sortDirection"
+    />	
+  </treecols>
 	<!-- menupopup id="zotero-itemmenu">
        	<menuitem id="zoteropreview-options" label="Preview Prefs" oncommand="Zotero.zoteropreview.openPreferenceWindow();"/>
 	</menupopup -->

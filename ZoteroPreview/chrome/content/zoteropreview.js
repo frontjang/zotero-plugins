@@ -21,9 +21,60 @@ Zotero.zoteropreview = new function() {
 			var doc = window.ZoteroPane.document;
 			doc.addEventListener("select", function(){
 				Zotero.zoteropreview.getCitationPreview();
+				Zotero.zoteropreview.getCitationPreview2();
 			});
 		}
+		
+        var original_getCellText = Zotero.ItemTreeView.prototype.getCellText;
+        Zotero.ItemTreeView.prototype.getCellText = function(row, col) {
+            // row: number
+            // col: object
+            if (col.id === 'zotero-items-column-noteDetail') {
+                const item = this.getRow(row).ref
+				/*if (item.isNote() || item.isAttachment() || (item.isAnnotation != null ? item.isAnnotation() : null)) {
+					return ''
+				}*/
+				return item.getNote().substring(0,80).replace(/<[^>]+>/g, '');
+            }
+			else if (col.id === 'zotero-items-column-tags') {
+				const item = this.getRow(row).ref
+				str=""
+				item.getTags().forEach(function (tag) {str+=tag.tag+","})
+				return str.slice(0, -1);
+			}
+			else return original_getCellText.apply(this, arguments);
+        }
 	};
+	
+	this.getCitationPreview2 = async function(){
+		Zotero.debug('zoteropreview: getCitationPreview2');
+		
+		const zoteroPane = Zotero.getActiveZoteroPane();
+		let att = zoteroPane.getSelectedItems()[0];
+		let path=att.getFilePath();
+		if (path.indexOf('mx-wc')>0) {
+		Zotero.getActiveZoteroPane().document.getElementById('zoteropreview2-preview-box').src="file://"+path;
+		Zotero.getActiveZoteroPane().document.getElementById('zotero-item-pane-content').selectedIndex=5
+		}
+	};
+	
+	this.addAttachment = async function(path) {
+        Zotero.debug('zoteropreview: addAttachment');
+		let rows = await Zotero.DB.queryAsync("SELECT collectionID, parentCollectionID, collectionName FROM collections where collectionName is 'Webpage'");
+		//var path="Z:\\clippings\\mx-wc\\생각들\\2022-01-12-1641918068\\index.html";
+		let data = await Zotero.File.getContentsAsync(path);
+		var title = data.match(/<title[^>]*>(.+)<\/title>/)[1];
+		let text=data.replace(/(\r\n|\n|\r)/gm, "").replace(/(<head.+\/head>)/g, "").replace(/<[^>]+>/g, '').replace(/\s\s+/g, ' ').trim();
+		var attachment = await Zotero.Attachments.linkFromFile({
+						file: path,
+						title: title,
+						collections: [rows[0].collectionID]
+					});
+		attachment.setNote(text);
+		await attachment.saveTx();
+    };
+
+
 
 	/**
 	* Primary function to generate the preview
