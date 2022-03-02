@@ -1,7 +1,7 @@
 // completely different approach copied from zotfile
 
 Zotero.zoteropreview = new function() {
-	
+	this.lastPreviewItemKey=null;
 	this.currentStyle = "";
 	
 	 /**
@@ -43,11 +43,11 @@ Zotero.zoteropreview = new function() {
 		// so just listen for a select - tried all kinds of things before this
 		if(window.ZoteroPane && Zotero.version.indexOf('5')==0) {
 			var doc = window.ZoteroPane.document;
-			window.ZoteroPane.itemsView.onSelectionChange.addListener(Zotero.zoteropreview.getCitationPreview,'zoteropreview1');
+			//window.ZoteroPane.itemsView.onSelectionChange.addListener(Zotero.zoteropreview.getCitationPreview,'zoteropreview1');
 			//window.ZoteroPane.collectionsView.itemTreeView.onSelect.addListener(Zotero.zoteropreview.listenerTesting,'zoteropreview2');
 			doc.addEventListener("select", function(){
+				//Zotero.debug('zoteropreview: select');
 				Zotero.zoteropreview.getCitationPreview('select');
-				Zotero.zoteropreview.getCitationPreview2();
 			});
 			doc.addEventListener("click", function(){
 				//Zotero.debug('zoteropreview: click');
@@ -56,6 +56,7 @@ Zotero.zoteropreview = new function() {
 			doc.addEventListener("focus", function(){
 				//Zotero.debug('zoteropreview: focus');
 				Zotero.zoteropreview.getCitationPreview('focus');
+				
 			});
 			window.ZoteroPane.document.getElementById('zotero-items-tree').addEventListener("focus", function(){
 				//Zotero.debug('zoteropreview: focus new');
@@ -67,38 +68,33 @@ Zotero.zoteropreview = new function() {
 			});
 		}
 		
-        var original_getCellText = Zotero.ItemTreeView.prototype.getCellText;
-        Zotero.ItemTreeView.prototype.getCellText = function(row, col) {
-            // row: number
-            // col: object
-            if (col.id === 'zotero-items-column-noteDetail') {
-                const item = this.getRow(row).ref
-				/*if (item.isNote() || item.isAttachment() || (item.isAnnotation != null ? item.isAnnotation() : null)) {
-					return ''
-				}*/
-				return item.getNote().substring(0,80).replace(/<[^>]+>/g, '');
-            }
-			else if (col.id === 'zotero-items-column-tags') {
-				const item = this.getRow(row).ref
-				str=""
-				item.getTags().forEach(function (tag) {str+=tag.tag+","})
-				return str.slice(0, -1);
-			}
-			else return original_getCellText.apply(this, arguments);
-        }
+		
+// customization start
+
+var original_getCellText = Zotero.ItemTreeView.prototype.getCellText;
+Zotero.ItemTreeView.prototype.getCellText = function(row, col) {
+	// row: number
+	// col: object
+	if (col.id === 'zotero-items-column-noteDetail') {
+		const item = this.getRow(row).ref;
+		/*if (item.isNote() || item.isAttachment() || (item.isAnnotation != null ? item.isAnnotation() : null)) {
+			return ''
+		}*/
+		return item.getNote().substring(0,80).replace(/<[^>]+>/g, '');
+	}
+	else if (col.id === 'zotero-items-column-tags') {
+		const item = this.getRow(row).ref
+		str=""
+		item.getTags().forEach(function (tag) {str+=tag.tag+","})
+		return str.slice(0, -1);
+	}
+	else return original_getCellText.apply(this, arguments);
+}
+
+// customization end
+  
 	};
 	
-	this.getCitationPreview2 = async function(){
-		Zotero.debug('zoteropreview: getCitationPreview2');
-		
-		const zoteroPane = Zotero.getActiveZoteroPane();
-		let att = zoteroPane.getSelectedItems()[0];
-		let path=att.getFilePath();
-		if (path.indexOf('mx-wc')>0) {
-		Zotero.getActiveZoteroPane().document.getElementById('zoteropreview2-preview-box').src="file://"+path;
-		Zotero.getActiveZoteroPane().document.getElementById('zotero-item-pane-content').selectedIndex=5
-		}
-	};
 	this.notifierCallback = function(){
 		this.notify = function (event, type, ids, extraData) {
 				Zotero.debug('zoteropreview: notify');
@@ -111,23 +107,71 @@ Zotero.zoteropreview = new function() {
 		Zotero.debug('zoteropreview: listenerTesting');
 		Zotero.zoteropreview.getCitationPreview();
 	};
-	
-	this.addAttachment = async function(path) {
-        Zotero.debug('zoteropreview: addAttachment');
-		let rows = await Zotero.DB.queryAsync("SELECT collectionID, parentCollectionID, collectionName FROM collections where collectionName is 'Webpage'");
-		//var path="Z:\\clippings\\mx-wc\\생각들\\2022-01-12-1641918068\\index.html";
-		let data = await Zotero.File.getContentsAsync(path);
-		var title = data.match(/<title[^>]*>(.+)<\/title>/)[1];
-		let text=data.replace(/(\r\n|\n|\r)/gm, "").replace(/(<head.+\/head>)/g, "").replace(/<[^>]+>/g, '').replace(/\s\s+/g, ' ').trim();
-		var attachment = await Zotero.Attachments.linkFromFile({
-						file: path,
-						title: title,
-						collections: [rows[0].collectionID]
-					});
-		attachment.setNote(text);
-		await attachment.saveTx();
-    };
 
+// customization start
+
+this.openAttachment = async function(opt) {
+	var item=Zotero.getActiveZoteroPane().getSelectedItems()[0];
+	
+	if(opt=="openFile"){
+		var file=await item.getFilePathAsync();
+		Zotero.launchFile(file);
+	}
+	else if (opt=="openFolder"){
+		var file=await item.getFilePathAsync();
+		Zotero.File.pathToFile(file).reveal()
+	}
+	else if(opt=="openUrl"){
+		if(item.getField('url').length>0) Zotero.launchURL(item.getField('url'));
+	}
+	else if(opt=="modifyUrl"){
+		//https://udn.realityripple.com/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIPromptService#prompt()
+		var promptText = { value: item.getField('url') };
+		var prompts = Components.classes['@mozilla.org/embedcomp/prompt-service;1'].getService(Components.interfaces.nsIPromptService);
+		var pressedOK = prompts.prompt(null,"Input URL","New URL",promptText,null,{})
+		if(pressedOK) {
+			item.setField('url', promptText.value);
+			item.saveTx();
+		}
+	}
+}
+
+this.getCitationPreview2 = async function(){
+	Zotero.debug('zoteropreview: getCitationPreview2');
+
+	if(Zotero.zoteropreview.lastPreviewItemKey != Zotero.getActiveZoteroPane().getSelectedItems()[0].key) {
+		Zotero.debug('zoteropreview: getCitationPreview2 index is not 5');
+
+		const zoteroPane = Zotero.getActiveZoteroPane();
+		let att = zoteroPane.getSelectedItems()[0];
+		let path=att.getFilePath();
+		if (path.indexOf('mx-wc')>0) {
+			Zotero.getActiveZoteroPane().document.getElementById('zoteropreview2-preview-box').src="file://"+path;
+			Zotero.getActiveZoteroPane().document.getElementById('zotero-item-pane-content').selectedIndex=5;
+			Zotero.zoteropreview.lastPreviewItemKey=Zotero.getActiveZoteroPane().getSelectedItems()[0].key;
+		}
+	}
+};
+
+this.addAttachment = async function(path) {
+	Zotero.debug('zoteropreview: addAttachment');
+	let rows = await Zotero.DB.queryAsync("SELECT collectionID, parentCollectionID, collectionName FROM collections where collectionName is 'Webpage'");
+	//var path="Z:\\clippings\\mx-wc\\생각들\\2022-01-12-1641918068\\index.html";
+	let data = await Zotero.File.getContentsAsync(path);
+	var title = data.match(/<title[^>]*>(.+)<\/title>/)[1];
+	var url=data.match(/OriginalSrc: (.+) --/)[1];
+	let text=data.replace(/(\r\n|\n|\r)/gm, "").replace(/(<head.+\/head>)/g, "").replace(/<[^>]+>/g, '').replace(/\s\s+/g, ' ').trim();
+	var attachment = await Zotero.Attachments.linkFromFile({
+	file: path,
+	title: title,
+	collections: [rows[0].collectionID]
+	});
+	attachment.setNote(text);
+	attachment.setField('url', url);
+	await attachment.saveTx();
+};
+
+// customization end
 
 
 	/**
@@ -137,6 +181,7 @@ Zotero.zoteropreview = new function() {
 	*/
 	this.getCitationPreview = async function(debugParam){
 		Zotero.debug('zoteropreview: getCitationPreview testing ' + debugParam);
+		Zotero.zoteropreview.getCitationPreview2();		
 		
 		// see https://www.zotero.org/support/dev/client_coding/javascript_api#managing_citations_and_bibliographies
 		var items = Zotero.getActiveZoteroPane().getSelectedItems();
