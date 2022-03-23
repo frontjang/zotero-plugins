@@ -67,34 +67,99 @@ Zotero.zoteropreview = new function() {
 				Zotero.zoteropreview.getCitationPreview('click new');
 			});
 		}
-		
-		
-// customization start
+	};
 
-var original_getCellText = Zotero.ItemTreeView.prototype.getCellText;
-Zotero.ItemTreeView.prototype.getCellText = function(row, col) {
-	// row: number
-	// col: object
-	if (col.id === 'zotero-items-column-noteDetail') {
-		const item = this.getRow(row).ref;
-		/*if (item.isNote() || item.isAttachment() || (item.isAnnotation != null ? item.isAnnotation() : null)) {
-			return ''
-		}*/
-		return item.getNote().substring(0,80).replace(/<[^>]+>/g, '');
+// customization start
+function printArr(arr) {
+	let str = "";
+	for (let item of arr) {
+		if (Array.isArray(item)) str += printArr(item);
+		else if ((typeof item) === 'object') str += JSON.stringify(item) + ", ";
+		else str += item + ", ";
 	}
-	else if (col.id === 'zotero-items-column-tags') {
-		const item = this.getRow(row).ref
-		str=""
-		item.getTags().forEach(function (tag) {str+=tag.tag+","})
-		return str.slice(0, -1);
-	}
-	else return original_getCellText.apply(this, arguments);
+	return str;
 }
 
+if (typeof Zotero.ItemTreeView !== 'undefined') {	//zotero 5.*
+
+	var original_getCellText = Zotero.ItemTreeView.prototype.getCellText;
+	Zotero.ItemTreeView.prototype.getCellText = function(row, col) {
+		// row: number
+		// col: object
+		if (col.id === 'zotero-items-column-noteDetail') {
+			const item = this.getRow(row).ref;
+			/*if (item.isNote() || item.isAttachment() || (item.isAnnotation != null ? item.isAnnotation() : null)) {
+				return ''
+			}*/
+			return item.getNote().substring(0,80).replace(/<[^>]+>/g, '');
+		}
+		else if (col.id === 'zotero-items-column-tags') {
+			const item = this.getRow(row).ref
+			str=""
+			item.getTags().forEach(function (tag) {str+=tag.tag+","})
+			return str.slice(0, -1);
+		}
+		else return original_getCellText.apply(this, arguments);
+	}
+
+} else {	//zotero 6.*
+	Zotero.debug('zoteropreview: ItemTreeView zotero 6.*');
+	const itemTree = require('zotero/itemTree');
+	var getColumns_org = itemTree.prototype.getColumns;
+	itemTree.prototype.getColumns = function () {
+		const addColumns = [
+			{
+				dataKey: 'noteDetail',
+				label: 'noteDetail',
+				flex: '1',
+				zoteroPersist: new Set(['width', 'hidden', 'sortDirection']),
+			},
+			{
+				dataKey: 'tags',
+				label: 'tags',
+				flex: '1',
+				zoteroPersist: new Set(['width', 'hidden', 'sortDirection']),
+			}
+		];
+		
+		var org=getColumns_org.apply(this, arguments);
+		const insertAfter = org.findIndex(column => column.dataKey === 'title');
+		org.splice(insertAfter + 1, 0, ...addColumns)
+		return org;
+	}
+		
+	var isFieldOfBase_org = Zotero.ItemFields.isFieldOfBase;
+	Zotero.ItemFields.isFieldOfBase = function (field, _baseField) {
+		if (['noteDetail', 'tags'].includes(field)) return false
+		return isFieldOfBase_org.apply(this, arguments)
+	}
+		
+	var getField_org = Zotero.Item.prototype.getField;
+	Zotero.Item.prototype.getField = function (field, unformatted, includeBaseMapped) {
+		try {
+			switch (field) {
+				case 'noteDetail':
+					try {
+						var note=Zotero.Items.get(this.id).getNote();	//getNote() can only be called on notes and attachments
+						return note.substring(0,80).replace(/<[^>]+>/g, '');
+					} catch (err) {
+						return '';
+					}
+				case 'tags':
+					str=""
+					Zotero.Items.get(this.id).getTags().forEach(function (tag) {str+=tag.tag+","})
+					return str.slice(0, -1);
+			}
+		} catch (err) {
+			Zotero.debug('patched getField:', {field, unformatted, includeBaseMapped, err})
+		}	
+		return getField_org.apply(this, arguments)
+	}
+	// & "C:\Program Files\7-Zip\7z.exe" a -tzip "ZoteroPreview.xpi" ".\ZoteroPreview\*" -aoa
+}	
+
 // customization end
-  
-	};
-	
+
 	this.notifierCallback = function(){
 		this.notify = function (event, type, ids, extraData) {
 				Zotero.debug('zoteropreview: notify');
