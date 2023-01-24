@@ -35,7 +35,8 @@ $todaysDate = (Get-Date).ToString("yyyy-MM-dd-hh-mm")
 # https://github.com/PowerShell/Microsoft.PowerShell.Archive/issues/48 - generates bad path separators
 # Get-ChildItem -Path $Path | Compress-Archive -DestinationPath "$pwd\$folderName.zip" -Update
 
-& "C:\Program Files\7-Zip\7z.exe" a -tzip -o"$pwd\" "$folderName.zip" "$Path\*" -aoa
+$env:Path += ';C:\temp;E:\temp'
+& "7za.exe" a -tzip -o"$pwd\" "$folderName.zip" "$Path\*" -aoa
 
 Move-Item -Path "$pwd\$folderName.xpi" -Destination "$pwd\$folderName.xpi.$todaysDate.bak" -Force
 Rename-Item "$pwd\$folderName.zip" -NewName "$folderName.xpi"
