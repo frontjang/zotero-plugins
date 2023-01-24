@@ -251,41 +251,94 @@ this.addAttachment = async function(path) {
 		// see https://www.zotero.org/support/dev/client_coding/javascript_api#managing_citations_and_bibliographies
 		var items = Zotero.getActiveZoteroPane().getSelectedItems();
 		
-		if (items.length == 1 && Zotero.getActiveZoteroPane().document.getElementById('zotero-view-tabbox').selectedIndex == 4){
+		if (items.length == 1 && Zotero.getActiveZoteroPane().document.getElementById('zotero-view-tabbox').selectedTab.id == 'zotero-editpane-preview-tab'){
 			Zotero.debug("zoteropreview: updating citation");
 			var qc = Zotero.QuickCopy;
-			var format = Zotero.Prefs.get("export.quickCopy.setting");
+			var format = qc.getFormatFromURL(qc.lastActiveURL);
+			format = Zotero.QuickCopy.unserializeSetting(format);
+
+			Zotero.debug("zoteropreview: " + JSON.stringify(format));
+			
+			if (format.mode == ""){
+				format.mode = "bibliography";
+			}
+
 			var userpref = Zotero.Prefs.get('extensions.zoteropreview.citationstyle', true);
 			// get the font size preference from the global setting
 			var fontSizePref = Zotero.Prefs.get('fontSize');
 			// Zotero.debug("format is: " + format);
-			// Zotero.debug("userpref is: " + userpref);
+			Zotero.debug("userpref is: " + userpref);
 			
 			if ( userpref != "" ){
-				format = "bibliography=" + userpref;
+				Zotero.debug("format: " + format["id"]);
+				Zotero.debug("setting userpref");
+				format.id = userpref;
+				format.mode = "bibliography";
 			}
-			// Zotero.debug("format is now: " + format);
+			Zotero.debug("format is now: " + JSON.stringify(format));
 
-			var msg = "No bibliography style is chosen in the settings for QuickCopy.";
+			var msg = "No bibliography style is chosen in the settings for QuickCopy. Set Preview preference.";
 			
 			// added a pane in overlay.xul
 			var iframe = Zotero.getActiveZoteroPane().document.getElementById('zoteropreview-preview-box');
 
-			if (format.split("=")[0] !== "bibliography") {
+			if (format.id == "" || format.mode == "export") {
 			   iframe.contentDocument.documentElement.innerHTML = msg;
 			   this.openPreferenceWindow();
 			   return;
 			}
+			
 			var biblio = qc.getContentFromItems(items, format);
-			msg = biblio.html;
+			msg = '<h3>' + Zotero.getString('styles.bibliography') + '</h3>' + biblio.html;
+			//msg += "<p><a href=\"#\" onclick=\"Zotero.zoteropreview.copyCitation(true);\">" + Zotero.getString('general.copy') + "</a></p>";
+
+			Zotero.debug("zoteropreview: " + msg);
+
+			var locale = format.locale ? format.locale : Zotero.Prefs.get('export.quickCopy.locale');
+			
+			Zotero.debug("format is: " + format);
+			
+			var style = Zotero.Styles.get(format.id);
+			var styleEngine = style.getCiteProc(locale, 'html');
+			
+			var citations = styleEngine.previewCitationCluster(
+				{
+					citationItems: items.map(item => ({ id: item.id })),
+					properties: {}
+				},
+				[], [], "html"
+			);
+			styleEngine.free();
+
+			msg =  '<h4 style="border-bottom:1px solid #eeeeee">' + style.title + "</h4>" + msg;
+			msg += '<h3 style="border-top:1px solid #eeeeee">' + Zotero.getString('styles.editor.output.individualCitations') + '</h3>' + citations;
+			// msg += "<p><a href=\"#\" onclick=\"Zotero.zoteropreview.copyCitation(false);\">" + Zotero.getString('general.copy') + "</a></p>";
+			Zotero.debug("zoteropreview: " + msg);
+
+
+			// working on copy
+			
+			// var asCitations = true; // in text
+			// Zotero_File_Interface.copyItemsToClipboard(
+			// 	items, format.id, locale, format.contentType == 'html', asCitations
+			// );
+			// asCitations = false; // bibliography
+			// Zotero_File_Interface.copyItemsToClipboard(
+			// 	items, format.id, locale, format.contentType == 'html', asCitations
+			// );
+
 			// wrap the output in a div that has the font size preference
 			msg = "<div style=\"font-size: " + fontSizePref + "em\">" + msg + "</div>";
 			// Zotero.debug(msg);
 
 			// https://github.com/zotero/zotero/blob/master/chrome/content/zotero/tools/cslpreview.js
 			// https://github.com/zotero/zotero/blob/master/chrome/content/zotero/tools/cslpreview.xul
-			
-			iframe.contentDocument.documentElement.innerHTML = msg;	
+
+			// Zotero_CSL_Editor.generateBibliography(styleEngine);
+
+			if (iframe.contentDocument.documentElement.innerHTML != msg){
+				iframe.contentDocument.documentElement.innerHTML = msg;	
+			}
 		}
 		Zotero.debug('zoteropreview: getCitationPreview done');
 		Zotero.debug('-------------------');
@@ -303,6 +356,23 @@ this.addAttachment = async function(path) {
             'zoteropreview-stylechooser',
             'chrome,centerscreen,scrollbars=yes,resizable=yes');
     };
+
+	this.copyCitation = function(asCitations){
+		// true = citation
+		// false = bib
+		var qc = Zotero.QuickCopy;
+		var items = Zotero.getActiveZoteroPane().getSelectedItems();
+		var format = qc.getFormatFromURL(qc.lastActiveURL);
+		format = qc.unserializeSetting(format);
+		var locale = format.locale ? format.locale : Zotero.Prefs.get('export.quickCopy.locale');
+		var userpref = Zotero.Prefs.get('extensions.zoteropreview.citationstyle', true);
+		if ( userpref != "" ){
+			format.id = userpref;
+		}
+		Zotero_File_Interface.copyItemsToClipboard(
+			 	items, format.id, locale, format.contentType == 'html', asCitations
+		);
+	};
 	
 };
 
